@@ -43,7 +43,7 @@ Full sentence context:
 Generate a flashcard for this Greek word/phrase."""
 
     response = client.messages.create(
-        model="claude-sonnet-4-20250514",
+        model="claude-sonnet-4-6",
         max_tokens=300,
         system=SYSTEM_PROMPT,
         messages=[{"role": "user", "content": user_message}],

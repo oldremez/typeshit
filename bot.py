@@ -62,12 +62,12 @@ def get_new_highlights() -> list:
 def format_card_message(card: Card) -> str:
     book_title = config.BOOKS.get(card.asin, {}).get("title", card.asin)
     return (
-        f"📖 *{escape_md(card.highlight)}*  _({escape_md(book_title)})_\n\n"
+        f"📖 *{escape_md(card.highlight)}*  _\\({escape_md(book_title)}\\)_\n\n"
         f"Context:\n_{escape_md(card.context)}_\n\n"
         f"━━━━━━━━━━━━━━━━\n"
         f"*Proposed card:*\n"
-        f"🇬🇷 Front: `{escape_md(card.front)}`\n"
-        f"🇬🇧 Back: `{escape_md(card.back)}`\n"
+        f"🇬🇷 Front: *{escape_md(card.front)}*\n"
+        f"🇷🇺 Back: *{escape_md(card.back)}*\n"
         f"💡 Note: _{escape_md(card.note)}_"
     )
 
@@ -130,6 +130,8 @@ async def process_next_highlight(update: Update, context: ContextTypes.DEFAULT_T
     )
     state_manager.add_pending(card)
     state_manager.mark_processed(highlight.annotation_id, highlight.asin, highlight.start_position)
+
+    # print(format_card_message(card))  # for debugging
 
     await update.effective_message.reply_text(
         format_card_message(card),

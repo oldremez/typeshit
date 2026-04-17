@@ -1,4 +1,7 @@
 import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # === FILL THESE IN ===
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "YOUR_BOT_TOKEN")
@@ -16,16 +19,16 @@ ANNOTATION_DB = os.path.expanduser(
 # Maps Kindle ASIN → local epub path and friendly title.
 # Add more books here as you sideload them.
 BOOKS = {
-    "JF4A2E2AQFQVOKE4YGCCLORXHJOPOCU7": {
+    "4VXEGKBCREAAAR57QSG4TGW27HTARRA6": {
         "title": "HP2 - Η Κάμαρα με τα Μυστικά",
         "epub":  os.path.expanduser("~/Downloads/hp2.epub"),
     },
-    "4VXEGKBCREAAAR57QSG4TGW27HTARRA6": {
+    "JF4A2E2AQFQVOKE4YGCCLORXHJOPOCU7": {
         "title": "HP1 - Η Φιλοσοφική Λίθος",
         "epub":  os.path.expanduser("~/Downloads/hp1.epub"),
     },
 }
 
 # === STATE & EXPORT ===
-STATE_FILE  = os.path.expanduser("~/.kindle_greek_bot_state.json")
+STATE_FILE  = os.path.expanduser(".kindle_greek_bot_state.json")
 EXPORT_CSV  = os.path.expanduser("~/Desktop/greek_flashcards.csv")

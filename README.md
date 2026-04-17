@@ -23,13 +23,12 @@ pip3 install -r requirements.txt
 3. Find `"chat": {"id": 123456789}` — that's your chat ID
 
 ### 4. Set environment variables
-Add to your `~/.zshrc` or `~/.bashrc`:
-```bash
-export TELEGRAM_BOT_TOKEN="your_token_here"
-export TELEGRAM_CHAT_ID="your_chat_id_here"
-export ANTHROPIC_API_KEY="your_anthropic_key_here"
+Create a `.env` file in the project root:
 ```
-Then: `source ~/.zshrc`
+TELEGRAM_BOT_TOKEN=your_token_here
+TELEGRAM_CHAT_ID=your_chat_id_here
+ANTHROPIC_API_KEY=your_anthropic_key_here
+```
 
 ### 5. Update config.py
 Edit `config.py` and set `EPUB_PATH` to point to your epub file:
