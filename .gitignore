@@ -1,0 +1,27 @@
+# macOS
+.DS_Store
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+*.egg-info/
+
+# Environment / secrets
+.env
+.env.*
+
+# Bot state
+*.json
+
+# Exports
+*.csv
+
+# epubs (large personal files)
+*.epub
+
+# IDE
+.idea/
+.vscode/
