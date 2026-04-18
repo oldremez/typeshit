@@ -10,6 +10,7 @@ Commands:
 
 import io
 import logging
+import os
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     Application, CommandHandler, CallbackQueryHandler,
@@ -17,7 +18,7 @@ from telegram.ext import (
 )
 
 import config
-from clippings_parser import parse_clippings, discover_books
+from clippings_parser import parse_clippings, discover_books, set_book_epub
 from epub_reader import load_epub_text, find_context
 from card_generator import generate_card
 from state import StateManager, Card
@@ -30,8 +31,19 @@ WAITING_FOR_EDIT = 1
 
 state_manager = StateManager(config.STATE_FILE)
 
-# Per-book epub text cache: asin -> full text string
+# Per-book epub text cache: book_id -> full text string
 epub_cache: dict[str, str] = {}
+
+
+def _reload_books():
+    """Re-read books.json into config.BOOKS after an update."""
+    import json as _json
+    with open(config.BOOKS_FILE, encoding="utf-8") as f:
+        raw = _json.load(f)
+    config.BOOKS = {
+        book_id: {**book, "epub": os.path.expanduser(book["epub"]) if book.get("epub") else ""}
+        for book_id, book in raw.items()
+    }
 
 
 def get_epub_text(book_id: str) -> str | None:
@@ -223,8 +235,14 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.message.reply_text("⏭ Skipped.")
         await process_next_highlight(update, context)
 
+    elif action == "setepub":
+        book_id = annotation_id
+        title = config.BOOKS.get(book_id, {}).get("title", book_id)
+        context.user_data["pending_epub_book_id"] = book_id
+        await query.edit_message_reply_markup(reply_markup=None)
+        await query.message.reply_text(f"Send the epub file for *{escape_md(title)}*\\.", parse_mode="MarkdownV2")
+
     elif action == "edit":
-        # Find the card and prompt for edit
         for card in state_manager.state.pending_cards:
             if card.annotation_id == annotation_id:
                 context.user_data["editing_id"] = annotation_id
@@ -268,16 +286,45 @@ async def handle_edit_message(update: Update, context: ContextTypes.DEFAULT_TYPE
         await update.message.reply_text("Card not found, may have already been processed.")
 
 
-async def handle_clippings_upload(update: Update, _context: ContextTypes.DEFAULT_TYPE):
-    doc = update.message.document
-    if not doc or doc.file_name != "My Clippings.txt":
+async def cmd_setepub(update: Update, _context: ContextTypes.DEFAULT_TYPE):
+    books = config.BOOKS
+    if not books:
+        await update.message.reply_text("No books discovered yet. Sync your clippings first.")
         return
-    file = await doc.get_file()
-    await file.download_to_drive(config.CLIPPINGS_PATH)
-    logger.info(f"Clippings synced to {config.CLIPPINGS_PATH} ({doc.file_size} bytes)")
-    new_books = discover_books(config.CLIPPINGS_PATH, config.BOOKS_FILE)
-    extra = f"\n📖 New books added: {len(new_books)}" if new_books else ""
-    await update.message.reply_text(f"📚 Clippings synced ({doc.file_size // 1024} KB).{extra} Use /stats to see highlights.")
+    keyboard = [
+        [InlineKeyboardButton(info["title"], callback_data=f"setepub:{book_id}")]
+        for book_id, info in books.items()
+    ]
+    await update.message.reply_text("Which book?", reply_markup=InlineKeyboardMarkup(keyboard))
+
+
+async def handle_document_upload(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    doc = update.message.document
+    if not doc:
+        return
+
+    if doc.file_name == "My Clippings.txt":
+        file = await doc.get_file()
+        await file.download_to_drive(config.CLIPPINGS_PATH)
+        logger.info(f"Clippings synced ({doc.file_size} bytes)")
+        new_books = discover_books(config.CLIPPINGS_PATH, config.BOOKS_FILE)
+        _reload_books()
+        extra = f"\n📖 New books added: {len(new_books)}" if new_books else ""
+        await update.message.reply_text(f"📚 Clippings synced ({doc.file_size // 1024} KB).{extra} Use /stats to see highlights.")
+        return
+
+    book_id = context.user_data.get("pending_epub_book_id")
+    if doc.file_name and doc.file_name.endswith(".epub") and book_id:
+        epub_path = os.path.join(config.EPUBS_DIR, f"{book_id}.epub")
+        file = await doc.get_file()
+        await file.download_to_drive(epub_path)
+        set_book_epub(config.BOOKS_FILE, book_id, epub_path)
+        _reload_books()
+        epub_cache.pop(book_id, None)
+        context.user_data.pop("pending_epub_book_id", None)
+        title = config.BOOKS.get(book_id, {}).get("title", book_id)
+        logger.info(f"Epub saved for {book_id} at {epub_path}")
+        await update.message.reply_text(f"✅ Epub saved for *{title}*.", parse_mode="Markdown")
 
 
 def main():
@@ -287,7 +334,8 @@ def main():
     app.add_handler(CommandHandler("stats", cmd_stats))
     app.add_handler(CommandHandler("pending", cmd_pending))
     app.add_handler(CallbackQueryHandler(button_callback))
-    app.add_handler(MessageHandler(filters.Document.ALL, handle_clippings_upload))
+    app.add_handler(CommandHandler("setepub", cmd_setepub))
+    app.add_handler(MessageHandler(filters.Document.ALL, handle_document_upload))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_edit_message))
 
     logger.info("Bot started. Listening...")

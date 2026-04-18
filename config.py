@@ -20,6 +20,9 @@ with open(_books_file, encoding="utf-8") as _f:
     _raw = json.load(_f)
 
 BOOKS_FILE = _books_file
+EPUBS_DIR  = os.path.join(os.path.dirname(__file__), "epubs")
+os.makedirs(EPUBS_DIR, exist_ok=True)
+
 BOOKS = {book_id: {**book, "epub": os.path.expanduser(book["epub"]) if book.get("epub") else ""} for book_id, book in _raw.items()}
 
 # === STATE & EXPORT ===

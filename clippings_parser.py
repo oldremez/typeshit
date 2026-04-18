@@ -96,6 +96,17 @@ def parse_clippings(path: str) -> list[ClippingHighlight]:
     return results
 
 
+def set_book_epub(books_json_path: str, book_id: str, epub_path: str) -> None:
+    """Update the epub path for a book in books.json."""
+    with open(books_json_path, "r", encoding="utf-8") as f:
+        books = json.load(f)
+    if book_id not in books:
+        raise KeyError(f"Book {book_id} not found in {books_json_path}")
+    books[book_id]["epub"] = epub_path
+    with open(books_json_path, "w", encoding="utf-8") as f:
+        json.dump(books, f, ensure_ascii=False, indent=2)
+
+
 def discover_books(clippings_path: str, books_json_path: str) -> list[str]:
     """
     Parse clippings and add any newly seen books to books.json.
