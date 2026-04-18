@@ -1,37 +1,28 @@
+import json
 import os
 from dotenv import load_dotenv
 
 load_dotenv()
 
-# === FILL THESE IN ===
+# === CREDENTIALS ===
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "YOUR_BOT_TOKEN")
 TELEGRAM_CHAT_ID   = os.environ.get("TELEGRAM_CHAT_ID", "YOUR_CHAT_ID")
 ANTHROPIC_API_KEY  = os.environ.get("ANTHROPIC_API_KEY", "YOUR_ANTHROPIC_KEY")
 
-# === KINDLE DEVICE ===
-# On the server: path where the bot stores the synced clippings file.
-# On the local watcher: path to read from when Kindle is mounted.
-CLIPPINGS_PATH        = os.path.expanduser("~/.kindle_clippings.txt")
-KINDLE_CLIPPINGS_PATH = "/Volumes/Kindle/documents/My Clippings.txt"
+# === KINDLE ===
+CLIPPINGS_PATH = os.path.expanduser("~/.kindle_clippings.txt")
 
-# === BOOK LIBRARY ===
-# Maps Kindle ASIN → epub for context extraction + title fragment for matching clippings.
-BOOKS = {
-    "JF4A2E2AQFQVOKE4YGCCLORXHJOPOCU7": {
-        "title": "HP1 - Η Φιλοσοφική Λίθος",
-        "epub":  os.path.expanduser("~/Downloads/hp1.epub"),
-        "clippings_title": "Φιλοσοφική Λίθος",
-    },
-    "4VXEGKBCREAAAR57QSG4TGW27HTARRA6": {
-        "title": "HP2 - Η Κάμαρα με τα Μυστικά",
-        "epub":  os.path.expanduser("~/Downloads/hp2.epub"),
-        "clippings_title": "Κάμαρα με τα Μυστικά",
-    },
-}
+# === BOOKS ===
+# Loaded from books.json. Each entry: { "title", "epub", "clippings_title" }
+# epub paths support ~ expansion.
+_books_file = os.path.join(os.path.dirname(__file__), "books.json")
+with open(_books_file, encoding="utf-8") as _f:
+    _raw = json.load(_f)
 
-CLIPPINGS_TITLE_TO_ASIN = {v["clippings_title"]: k for k, v in BOOKS.items()}
+BOOKS = {asin: {**book, "epub": os.path.expanduser(book["epub"])} for asin, book in _raw.items()}
+CLIPPINGS_TITLE_TO_ASIN = {book["clippings_title"]: asin for asin, book in BOOKS.items()}
 
 # === STATE & EXPORT ===
-STATE_FILE  = os.path.expanduser(".kindle_greek_bot_state.json")
-EXPORT_CSV  = os.path.expanduser("~/Desktop/greek_flashcards.csv")
+STATE_FILE            = os.path.expanduser("~/.kindle_greek_bot_state.json")
+EXPORT_CSV            = os.path.expanduser("~/Desktop/greek_flashcards.csv")
 AUTO_EXPORT_THRESHOLD = 30
