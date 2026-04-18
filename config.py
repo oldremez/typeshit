@@ -16,6 +16,9 @@ CLIPPINGS_PATH = os.path.expanduser("~/.kindle_clippings.txt")
 # Loaded from books.json. Each entry: { "title", "epub", "clippings_title" }
 # epub paths support ~ expansion.
 _books_file = os.path.join(os.path.dirname(__file__), "books.json")
+if not os.path.exists(_books_file):
+    with open(_books_file, "w", encoding="utf-8") as _f:
+        json.dump({}, _f)
 with open(_books_file, encoding="utf-8") as _f:
     _raw = json.load(_f)
 
