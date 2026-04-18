@@ -12,7 +12,7 @@ SYSTEM_PROMPT = """You are a Greek language expert helping a learner create Anki
 Given a highlighted Greek word or phrase and its sentence context, produce a flashcard with:
 - front: the normalized (dictionary/lemma) form of the word or phrase
 - back: the Russian translation, concise and accurate
-- note: a brief usage note — grammar info (e.g. verb conjugation, noun case),
+- note: a brief usage note in Russian — grammar info (e.g. verb conjugation, noun case),
   idiomatic meaning, or why this form is interesting
 
 Rules:
@@ -24,7 +24,7 @@ Rules:
 - Respond ONLY with valid JSON, no markdown, no extra text
 
 Example response:
-{"front": "αγαπώ", "back": "я люблю / любить", "note": "Common verb; irregular in some tenses"}
+{"front": "αγαπώ", "back": "я люблю / любить", "note": "Глагол; неправильный в некоторых временах"}
 """
 
 
