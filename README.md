@@ -38,8 +38,50 @@ ANTHROPIC_API_KEY=your_anthropic_key_here
 ```
 
 ### 5. Run the bot
+
+For a quick test:
 ```bash
 python3 bot.py
+```
+
+For persistent background execution on a Linux server, use systemd:
+
+```bash
+sudo nano /etc/systemd/system/kindlebot.service
+```
+
+Paste the following, replacing `/home/user/typeshit` and `user` with your actual path and username:
+
+```ini
+[Unit]
+Description=Kindle Greek Flashcard Bot
+After=network.target
+
+[Service]
+Type=simple
+User=user
+WorkingDirectory=/home/user/typeshit
+ExecStart=/home/user/typeshit/venv/bin/python3 bot.py
+Restart=on-failure
+RestartSec=10
+StandardOutput=append:/home/user/typeshit/bot.log
+StandardError=append:/home/user/typeshit/bot.log
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Enable and start:
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable kindlebot
+sudo systemctl start kindlebot
+```
+
+Check status and logs:
+```bash
+sudo systemctl status kindlebot
+tail -f /home/user/typeshit/bot.log
 ```
 
 ## Kindle Watcher Setup
