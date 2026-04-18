@@ -4,12 +4,10 @@ Telegram bot for reviewing Greek flashcards from Kindle highlights.
 
 Commands:
   /next    — process next unprocessed highlight
-  /batch N — process N highlights at once (default 5)
   /stats   — show progress stats
   /pending — show how many cards are waiting for review
 """
 
-import asyncio
 import io
 import logging
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
@@ -172,21 +170,6 @@ async def cmd_next(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await process_next_highlight(update, context)
 
 
-async def cmd_batch(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Process N highlights: /batch 5"""
-    try:
-        n = int(context.args[0]) if context.args else 5
-        n = min(n, 20)  # safety cap
-    except (ValueError, IndexError):
-        n = 5
-
-    await update.message.reply_text(f"Processing {n} highlights...")
-    for _ in range(n):
-        card = await process_next_highlight(update, context, silent=True)
-        if card is None:
-            break
-        await asyncio.sleep(1)  # be kind to the API
-
 
 async def cmd_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     new = get_new_highlights()
@@ -304,7 +287,6 @@ def main():
     app = Application.builder().token(config.TELEGRAM_BOT_TOKEN).build()
 
     app.add_handler(CommandHandler("next", cmd_next))
-    app.add_handler(CommandHandler("batch", cmd_batch))
     app.add_handler(CommandHandler("stats", cmd_stats))
     app.add_handler(CommandHandler("pending", cmd_pending))
     app.add_handler(CallbackQueryHandler(button_callback))
