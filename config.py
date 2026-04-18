@@ -19,8 +19,8 @@ _books_file = os.path.join(os.path.dirname(__file__), "books.json")
 with open(_books_file, encoding="utf-8") as _f:
     _raw = json.load(_f)
 
-BOOKS = {asin: {**book, "epub": os.path.expanduser(book["epub"])} for asin, book in _raw.items()}
-CLIPPINGS_TITLE_TO_ASIN = {book["clippings_title"]: asin for asin, book in BOOKS.items()}
+BOOKS_FILE = _books_file
+BOOKS = {book_id: {**book, "epub": os.path.expanduser(book["epub"]) if book.get("epub") else ""} for book_id, book in _raw.items()}
 
 # === STATE & EXPORT ===
 STATE_FILE            = os.path.expanduser("~/.kindle_greek_bot_state.json")

@@ -17,7 +17,7 @@ from telegram.ext import (
 )
 
 import config
-from clippings_parser import parse_clippings
+from clippings_parser import parse_clippings, discover_books
 from epub_reader import load_epub_text, find_context
 from card_generator import generate_card
 from state import StateManager, Card
@@ -34,21 +34,21 @@ state_manager = StateManager(config.STATE_FILE)
 epub_cache: dict[str, str] = {}
 
 
-def get_epub_text(asin: str) -> str | None:
-    if asin not in epub_cache:
-        book_info = config.BOOKS.get(asin)
-        if not book_info:
-            logger.warning(f"No epub configured for ASIN {asin}")
+def get_epub_text(book_id: str) -> str | None:
+    if book_id not in epub_cache:
+        book_info = config.BOOKS.get(book_id)
+        if not book_info or not book_info.get("epub"):
+            logger.warning(f"No epub configured for book {book_id}")
             return None
         logger.info(f"Loading epub for {book_info['title']}...")
-        epub_cache[asin] = load_epub_text(book_info["epub"])
-        logger.info(f"Loaded {len(epub_cache[asin])} chars")
-    return epub_cache[asin]
+        epub_cache[book_id] = load_epub_text(book_info["epub"])
+        logger.info(f"Loaded {len(epub_cache[book_id])} chars")
+    return epub_cache[book_id]
 
 
 def get_new_highlights() -> list:
     """Get all highlights not yet processed across all books."""
-    all_highlights = parse_clippings(config.CLIPPINGS_PATH, config.CLIPPINGS_TITLE_TO_ASIN)
+    all_highlights = parse_clippings(config.CLIPPINGS_PATH)
     new = [h for h in all_highlights if not state_manager.is_processed(h.annotation_id)]
     logger.debug(f"get_new_highlights: {len(all_highlights)} total, {len(new)} unprocessed, {len(state_manager.state.processed_ids)} in processed_ids")
     return new
@@ -120,22 +120,17 @@ async def process_next_highlight(update: Update, context: ContextTypes.DEFAULT_T
         return None
 
     highlight = new_highlights[0]
-    logger.debug(f"Processing highlight {highlight.annotation_id} from book {highlight.asin} loc {highlight.location_start}")
-    epub_text = get_epub_text(highlight.asin)
-    if epub_text is None:
-        await update.effective_message.reply_text(
-            f"⚠️ No epub configured for book `{highlight.asin}`.\n"
-            "Add it to `BOOKS` in config.py.",
-            parse_mode="Markdown"
-        )
-        return None
-
-    data = find_context(epub_text, highlight.text)
-    if data is None:
-        logger.warning(f"Could not find '{highlight.text}' in epub, using highlight text only")
+    logger.debug(f"Processing highlight {highlight.annotation_id} from book {highlight.book_id} loc {highlight.location_start}")
+    epub_text = get_epub_text(highlight.book_id)
+    if epub_text is not None:
+        data = find_context(epub_text, highlight.text)
+        if data is None:
+            logger.warning(f"Could not find '{highlight.text}' in epub, using highlight text only")
+            data = {"highlight": highlight.text, "context": highlight.text}
+    else:
         data = {"highlight": highlight.text, "context": highlight.text}
 
-    book_title = config.BOOKS.get(highlight.asin, {}).get("title", highlight.asin)
+    book_title = config.BOOKS.get(highlight.book_id, {}).get("title", highlight.book_title)
     await update.effective_message.reply_text(f"⏳ Generating card with Claude... _{book_title}_", parse_mode="Markdown")
 
     try:
@@ -146,7 +141,7 @@ async def process_next_highlight(update: Update, context: ContextTypes.DEFAULT_T
 
     card = Card(
         annotation_id=highlight.annotation_id,
-        asin=highlight.asin,
+        asin=highlight.book_id,
         highlight=data["highlight"],
         context=data["context"],
         front=card_data.get("front", data["highlight"]),
@@ -177,10 +172,10 @@ async def cmd_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Per-book remaining
     from collections import Counter
-    remaining_by_book = Counter(h.asin for h in new)
+    remaining_by_book = Counter(h.book_id for h in new)
     book_lines = ""
-    for asin, count in remaining_by_book.items():
-        title = config.BOOKS.get(asin, {}).get("title", asin)
+    for book_id, count in remaining_by_book.items():
+        title = config.BOOKS.get(book_id, {}).get("title", book_id)
         book_lines += f"  • {title}: {count}\n"
 
     msg = (
@@ -280,7 +275,9 @@ async def handle_clippings_upload(update: Update, _context: ContextTypes.DEFAULT
     file = await doc.get_file()
     await file.download_to_drive(config.CLIPPINGS_PATH)
     logger.info(f"Clippings synced to {config.CLIPPINGS_PATH} ({doc.file_size} bytes)")
-    await update.message.reply_text(f"📚 Clippings synced ({doc.file_size // 1024} KB). Use /stats to see new highlights.")
+    new_books = discover_books(config.CLIPPINGS_PATH, config.BOOKS_FILE)
+    extra = f"\n📖 New books added: {len(new_books)}" if new_books else ""
+    await update.message.reply_text(f"📚 Clippings synced ({doc.file_size // 1024} KB).{extra} Use /stats to see highlights.")
 
 
 def main():
