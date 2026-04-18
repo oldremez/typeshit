@@ -15,9 +15,11 @@ When you plug in your Kindle, the watcher automatically sends the clippings file
 
 ## Bot Setup
 
-### 1. Install dependencies
+### 1. Set up a virtual environment
 ```bash
-pip3 install -r requirements.txt
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
 ```
 
 ### 2. Create a Telegram bot
@@ -44,44 +46,37 @@ For a quick test:
 python3 bot.py
 ```
 
-For persistent background execution on a Linux server, use systemd:
+For persistent background execution on a Linux server, use systemd. Run this from the project directory — it uses `$PWD` and `$USER` so nothing needs to be edited manually:
 
 ```bash
-sudo nano /etc/systemd/system/kindlebot.service
-```
-
-Paste the following, replacing `/home/user/typeshit` and `user` with your actual path and username:
-
-```ini
+sudo tee /etc/systemd/system/kindlebot.service > /dev/null << EOF
 [Unit]
 Description=Kindle Greek Flashcard Bot
 After=network.target
 
 [Service]
 Type=simple
-User=user
-WorkingDirectory=/home/user/typeshit
-ExecStart=/home/user/typeshit/venv/bin/python3 bot.py
+User=$USER
+WorkingDirectory=$PWD
+ExecStart=$PWD/venv/bin/python3 bot.py
 Restart=on-failure
 RestartSec=10
-StandardOutput=append:/home/user/typeshit/bot.log
-StandardError=append:/home/user/typeshit/bot.log
+StandardOutput=append:$PWD/bot.log
+StandardError=append:$PWD/bot.log
 
 [Install]
 WantedBy=multi-user.target
-```
+EOF
 
-Enable and start:
-```bash
 sudo systemctl daemon-reload
 sudo systemctl enable kindlebot
 sudo systemctl start kindlebot
 ```
 
-Check status and logs:
+Check status and follow logs:
 ```bash
 sudo systemctl status kindlebot
-tail -f /home/user/typeshit/bot.log
+tail -f bot.log
 ```
 
 ## Kindle Watcher Setup
