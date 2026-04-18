@@ -31,3 +31,4 @@ CLIPPINGS_TITLE_TO_ASIN = {v["clippings_title"]: k for k, v in BOOKS.items()}
 # === STATE & EXPORT ===
 STATE_FILE  = os.path.expanduser(".kindle_greek_bot_state.json")
 EXPORT_CSV  = os.path.expanduser("~/Desktop/greek_flashcards.csv")
+AUTO_EXPORT_THRESHOLD = 30

@@ -93,3 +93,10 @@ class StateManager:
                 self._state.pending_cards.remove(card)
                 self.save()
                 return
+
+    def pop_accepted_cards(self) -> list:
+        """Return all accepted cards and clear the accepted queue."""
+        cards = list(self._state.accepted_cards)
+        self._state.accepted_cards = []
+        self.save()
+        return cards

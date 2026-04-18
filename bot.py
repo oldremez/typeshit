@@ -11,6 +11,7 @@ Commands:
 """
 
 import asyncio
+import io
 import logging
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
@@ -25,7 +26,7 @@ from card_generator import generate_card
 from state import StateManager, Card
 from exporter import export_to_csv
 
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Conversation states
@@ -55,6 +56,23 @@ def get_new_highlights() -> list:
     new = [h for h in all_highlights if not state_manager.is_processed(h.annotation_id)]
     logger.debug(f"get_new_highlights: {len(all_highlights)} total, {len(new)} unprocessed, {len(state_manager.state.processed_ids)} in processed_ids")
     return new
+
+
+async def maybe_auto_export(update: Update):
+    """Send CSV to Telegram and clear accepted queue when threshold is reached."""
+    if len(state_manager.state.accepted_cards) < config.AUTO_EXPORT_THRESHOLD:
+        return
+    cards = state_manager.pop_accepted_cards()
+    buf = io.StringIO()
+    for card in cards:
+        back = f"{card.back} | {card.note}" if card.note else card.back
+        buf.write(f"{card.front}\t{back}\n")
+    buf.seek(0)
+    await update.effective_message.reply_document(
+        document=io.BytesIO(buf.read().encode("utf-8")),
+        filename="greek_flashcards.txt",
+        caption=f"🎉 {len(cards)} cards ready! Import into Quizlet: Create set → Import → Tab between term/definition, New line between cards.",
+    )
 
 
 def format_card_message(card: Card) -> str:
@@ -224,7 +242,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if card:
             await query.edit_message_reply_markup(reply_markup=None)
             await query.message.reply_text(f"✅ Accepted: *{card.front}* → {card.back}", parse_mode="Markdown")
-            # Auto-send next
+            await maybe_auto_export(update)
             await process_next_highlight(update, context)
 
     elif action == "skip":
@@ -272,6 +290,7 @@ async def handle_edit_message(update: Update, context: ContextTypes.DEFAULT_TYPE
             f"✅ Saved: *{card.front}* → {card.back}",
             parse_mode="Markdown"
         )
+        await maybe_auto_export(update)
         await process_next_highlight(update, context)
     else:
         await update.message.reply_text("Card not found, may have already been processed.")
