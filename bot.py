@@ -5,7 +5,6 @@ Telegram bot for reviewing Greek flashcards from Kindle highlights.
 Commands:
   /next    — process next unprocessed highlight
   /batch N — process N highlights at once (default 5)
-  /export  — export accepted cards to CSV
   /stats   — show progress stats
   /pending — show how many cards are waiting for review
 """
@@ -24,7 +23,6 @@ from clippings_parser import parse_clippings
 from epub_reader import load_epub_text, find_context
 from card_generator import generate_card
 from state import StateManager, Card
-from exporter import export_to_csv
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -225,20 +223,6 @@ async def cmd_pending(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
 
-async def cmd_export(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    cards = state_manager.state.accepted_cards
-    if not cards:
-        await update.message.reply_text("No accepted cards yet.")
-        return
-    count = export_to_csv(cards, config.EXPORT_CSV)
-    await update.message.reply_text(
-        f"✅ Exported {count} cards to:\n`{config.EXPORT_CSV}`\n\n"
-        "Import into Quizlet: Create set → Import → paste file → "
-        "set 'Between term and definition' to *Tab*, 'Between rows' to *New line*",
-        parse_mode="Markdown"
-    )
-
-
 # --- Callback handlers ---
 
 async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -323,7 +307,6 @@ def main():
     app.add_handler(CommandHandler("batch", cmd_batch))
     app.add_handler(CommandHandler("stats", cmd_stats))
     app.add_handler(CommandHandler("pending", cmd_pending))
-    app.add_handler(CommandHandler("export", cmd_export))
     app.add_handler(CallbackQueryHandler(button_callback))
     app.add_handler(MessageHandler(filters.Document.ALL, handle_clippings_upload))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_edit_message))
