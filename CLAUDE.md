@@ -2,56 +2,77 @@
 
 ## What this is
 A Telegram bot that helps the owner learn Greek by turning Kindle highlights into flashcards.
-The owner reads Harry Potter in Greek (sideloaded epub), highlights words/phrases in Kindle for Mac,
-and the bot processes them into Quizlet-ready cards using Claude API.
+The owner reads Harry Potter in Greek on a Kindle device, highlights words/phrases, and the bot
+processes them into Quizlet-ready cards using Claude API.
 
 ## Owner's goal
 Learn Greek vocabulary. Highlights are single words or short phrases. Cards need:
 - Normalized (dictionary) form on the front
-- English translation on the back
-- A brief grammar/usage note
+- Russian translation on the back
+- A brief grammar/usage note in Russian
+
+## Architecture
+Two separate components:
+
+**Bot** (runs on a remote server):
+- Reads `My Clippings.txt` stored locally (synced from Kindle)
+- Extracts context from epub files
+- Generates cards via Claude API
+- Handles all Telegram interactions
+
+**Kindle Watcher** (`kindle_watcher/`, runs on the owner's Mac):
+- Polls for Kindle USB mount
+- On detection, sends `My Clippings.txt` to the bot via Telegram
+- Runs as a launchd background service
 
 ## How it works
-1. Highlights are read from the Kindle for Mac SQLite annotation DB
-2. The `shortPosition` char offset is used to find the highlight in the epub text
-3. Surrounding sentence is extracted for context
-4. Claude API generates a normalized flashcard from highlight + context
-5. Bot sends the card to Telegram with Accept / Edit / Skip buttons
-6. Accepted cards accumulate and can be exported as a Quizlet-compatible CSV
+1. Kindle connects → watcher sends `My Clippings.txt` to bot via Telegram
+2. Bot saves the file to `~/.kindle_clippings.txt`
+3. `/next` or `/batch` parses the clippings, finds unprocessed highlights
+4. Highlight text is searched in the epub to extract surrounding sentence context
+5. Claude API generates a normalized flashcard from highlight + context
+6. Bot sends the card to Telegram with Accept / Edit / Skip buttons
+7. Every 30 accepted cards, bot sends a Quizlet-ready TSV file in chat and clears the queue
 
 ## Tech stack
-- Python 3.11+
-- `python-telegram-bot` 20.7 (async)
+- Python 3.13
+- `python-telegram-bot` 21.9 (async)
 - `anthropic` SDK
 - `ebooklib` + `beautifulsoup4` for epub parsing
-- SQLite (no ORM) for reading Kindle DB
+- `python-dotenv` for environment variable loading
 - JSON file for state persistence
 
 ## File map
 ```
-bot.py            — Telegram bot entry point, all command/callback handlers
-config.py         — All paths, tokens, and book ASIN→epub mappings
-kindle_db.py      — Reads highlight records from Kindle annotation SQLite DB
-epub_reader.py    — Extracts plain text from epub, resolves context around a position
-card_generator.py — Calls Claude API to generate a flashcard JSON
-state.py          — StateManager: persists progress + card queue to JSON file
-exporter.py       — Dumps accepted cards to tab-separated CSV for Quizlet
-requirements.txt  — Python dependencies
+bot.py               — Telegram bot entry point, all command/callback handlers
+config.py            — All paths, tokens, book ASIN→epub mappings, thresholds
+clippings_parser.py  — Parses My Clippings.txt, returns ClippingHighlight records
+epub_reader.py       — Loads epub text, finds context around a highlight by text search
+card_generator.py    — Calls Claude API to generate a flashcard JSON
+state.py             — StateManager: persists progress + card queue to JSON file
+exporter.py          — Dumps accepted cards to tab-separated CSV for Quizlet
+requirements.txt     — Python dependencies
+
+kindle_watcher/
+  watcher.py                 — Polls for Kindle mount, sends clippings via Telegram
+  requirements.txt           — Watcher dependencies (telegram + dotenv only)
+  com.kindlewatcher.plist    — launchd agent for autostart (uses __DIR__ placeholder)
+  README.md                  — Watcher setup instructions
 ```
 
 ## Key data structures
 
-### Highlight (kindle_db.py)
+### ClippingHighlight (clippings_parser.py)
 ```python
 @dataclass
-class Highlight:
-    annotation_id: str   # e.g. "kindle.highlight-32531"
-    book_id: str         # full dataset_id string from DB
-    asin: str            # e.g. "JF4A2E2AQFQVOKE4YGCCLORXHJOPOCU7"
-    start_position: int  # char offset into epub plain text
-    end_position: int
-    created_time: int    # ms epoch
-    modified_time: int
+class ClippingHighlight:
+    annotation_id: str   # stable md5 hash of (book_title, location_start, text)
+    asin: str
+    book_title: str
+    text: str            # the actual highlighted text from My Clippings.txt
+    location_start: int  # Kindle location number (used for ordering)
+    location_end: int
+    added_date: str
 ```
 
 ### Card (state.py)
@@ -60,11 +81,11 @@ class Highlight:
 class Card:
     annotation_id: str
     asin: str
-    highlight: str   # raw highlighted text from epub
-    context: str     # surrounding sentence
+    highlight: str   # highlighted text (from clippings)
+    context: str     # surrounding sentence (from epub search)
     front: str       # normalized Greek form (e.g. infinitive for verbs)
-    back: str        # English translation
-    note: str        # grammar/usage note
+    back: str        # Russian translation
+    note: str        # grammar/usage note in Russian
     status: str      # "pending" | "accepted" | "skipped"
 ```
 
@@ -72,63 +93,66 @@ class Card:
 ```python
 @dataclass
 class BotState:
-    last_processed: dict        # asin -> {annotation_id, position}
+    processed_ids: list[str]    # annotation_ids already turned into cards
     pending_cards: list[Card]   # cards waiting for user review
-    accepted_cards: list[Card]  # cards the user approved
+    accepted_cards: list[Card]  # cards the user approved (cleared every 30)
 ```
-State is saved to `~/.kindle_greek_bot_state.json` after every mutation.
+State is saved to `.kindle_greek_bot_state.json` (project root) after every mutation.
 
-## Kindle DB details
-- Path: `~/Library/Containers/com.amazon.Lassen/Data/Library/KSDK/amzn1.account.AE5JBCAZMWVHBRGAS2R2TZDIR3TA/ksdk_annotation_v1.db`
-- Table: `server_view`, column `dataset=1` for highlights
-- `serialized_payload` is JSON with `type`, `start_position.shortPosition`, `end_position.shortPosition`, `book_data.asin`
-- Positions are **character offsets** (not byte offsets) into the epub plain text
+## My Clippings.txt format
+```
+BOOK TITLE (Author)
+- Your Highlight on page X | Location Y-Z | Added on DAY, DD MONTH YYYY HH:MM:SS
+
+highlighted text
+==========
+```
+Only `Your Highlight` entries are parsed; bookmarks and notes are skipped.
+Book matching uses a title substring configured per-book in `config.CLIPPINGS_TITLE_TO_ASIN`.
 
 ## Books configured
-| ASIN | Title | epub |
-|------|-------|------|
-| JF4A2E2AQFQVOKE4YGCCLORXHJOPOCU7 | HP2 - Η Κάμαρα με τα Μυστικά | ~/Downloads/hp2.epub |
-| 4VXEGKBCREAAAR57QSG4TGW27HTARRA6 | HP1 - Η Φιλοσοφική Λίθος | ~/Downloads/hp1.epub |
+| ASIN | Title | Clippings fragment |
+|------|-------|--------------------|
+| JF4A2E2AQFQVOKE4YGCCLORXHJOPOCU7 | HP1 - Η Φιλοσοφική Λίθος | Φιλοσοφική Λίθος |
+| 4VXEGKBCREAAAR57QSG4TGW27HTARRA6 | HP2 - Η Κάμαρα με τα Μυστικά | Κάμαρα με τα Μυστικά |
 
-HP2 has ~3871 highlights, HP1 has ~766. Both confirmed working with char offsets.
-
-## Epub text extraction
-`epub_reader.load_epub_text()` concatenates `get_text()` from all ITEM_DOCUMENT nodes in order.
-The resulting string is ~550k–560k chars per book. This is what positions index into.
-Context extraction walks outward from the highlight to find sentence boundaries (`.!?\n`).
+Epub files are read from `~/Downloads/hp1.epub` and `~/Downloads/hp2.epub` for context extraction only.
 
 ## Telegram bot commands
 | Command | Handler | Description |
 |---------|---------|-------------|
-| /next | cmd_next | Process next highlight, send card |
-| /batch N | cmd_batch | Process N highlights (default 5, max 20) |
+| /next | cmd_next | Show next pending card, or generate one from a new highlight |
+| /batch N | cmd_batch | Generate N new cards (default 5, max 20) |
 | /stats | cmd_stats | Show accepted/pending/remaining per book |
 | /pending | cmd_pending | Re-show last 5 unreviewed cards |
-| /export | cmd_export | Write accepted cards to ~/Desktop/greek_flashcards.csv |
+| /export | cmd_export | Send accepted cards as TSV file in chat |
 
 Inline buttons: `accept:<id>` / `edit:<id>` / `skip:<id>`
 Edit flow: bot stores `editing_id` in `context.user_data`, user replies `front | back | note`
 
-## Environment variables required
+Document upload: sending `My Clippings.txt` to the bot saves it as the new clippings source.
+
+## Auto-export
+When `accepted_cards` reaches `config.AUTO_EXPORT_THRESHOLD` (default 30), the bot sends a
+TSV file in chat and clears `accepted_cards`. Format: `front\tback | note` per line.
+
+## Environment variables
 ```
-TELEGRAM_BOT_TOKEN
-TELEGRAM_CHAT_ID
-ANTHROPIC_API_KEY
+TELEGRAM_BOT_TOKEN    — bot token from @BotFather
+TELEGRAM_CHAT_ID      — your personal chat ID
+ANTHROPIC_API_KEY     — Claude API key
 ```
+Loaded via `.env` file using `python-dotenv`.
 
 ## Known issues / things not yet done
-- The bot has not been run end-to-end yet — first run may surface bugs
-- No file watcher yet (auto-trigger on new highlights); currently manual `/next` or `/batch`
-- No deduplication guard if a highlight appears in both `server_view` and `local_edit`
-- `/batch` sends all cards sequentially without waiting for user review between them — may want to change this to queue them and send one at a time
-- Edit flow doesn't auto-advance if user sends plain text that isn't a card edit (falls through silently)
-- `exporter.py` writes to a hardcoded desktop path; could be improved to send the file directly in Telegram
+- Context search (`epub_reader.find_context`) uses a simple `str.find()` — will miss highlights
+  if the epub text differs slightly from the clippings text (encoding, whitespace)
+- `/batch` generates cards without waiting for review between them — queue is reviewed one at a time via `/next` afterwards
+- Edit flow falls through silently if user sends plain text that isn't a card edit and no `editing_id` is set
 
 ## How to run
 ```bash
 pip3 install -r requirements.txt
-export TELEGRAM_BOT_TOKEN=...
-export TELEGRAM_CHAT_ID=...
-export ANTHROPIC_API_KEY=...
+# create .env with the three vars above
 python3 bot.py
 ```

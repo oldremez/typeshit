@@ -306,6 +306,16 @@ async def handle_edit_message(update: Update, context: ContextTypes.DEFAULT_TYPE
         await update.message.reply_text("Card not found, may have already been processed.")
 
 
+async def handle_clippings_upload(update: Update, _context: ContextTypes.DEFAULT_TYPE):
+    doc = update.message.document
+    if not doc or doc.file_name != "My Clippings.txt":
+        return
+    file = await doc.get_file()
+    await file.download_to_drive(config.CLIPPINGS_PATH)
+    logger.info(f"Clippings synced to {config.CLIPPINGS_PATH} ({doc.file_size} bytes)")
+    await update.message.reply_text(f"📚 Clippings synced ({doc.file_size // 1024} KB). Use /stats to see new highlights.")
+
+
 def main():
     app = Application.builder().token(config.TELEGRAM_BOT_TOKEN).build()
 
@@ -315,6 +325,7 @@ def main():
     app.add_handler(CommandHandler("pending", cmd_pending))
     app.add_handler(CommandHandler("export", cmd_export))
     app.add_handler(CallbackQueryHandler(button_callback))
+    app.add_handler(MessageHandler(filters.Document.ALL, handle_clippings_upload))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_edit_message))
 
     logger.info("Bot started. Listening...")

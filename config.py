@@ -9,7 +9,10 @@ TELEGRAM_CHAT_ID   = os.environ.get("TELEGRAM_CHAT_ID", "YOUR_CHAT_ID")
 ANTHROPIC_API_KEY  = os.environ.get("ANTHROPIC_API_KEY", "YOUR_ANTHROPIC_KEY")
 
 # === KINDLE DEVICE ===
-CLIPPINGS_PATH = "/Volumes/Kindle/documents/My Clippings.txt"
+# On the server: path where the bot stores the synced clippings file.
+# On the local watcher: path to read from when Kindle is mounted.
+CLIPPINGS_PATH        = os.path.expanduser("~/.kindle_clippings.txt")
+KINDLE_CLIPPINGS_PATH = "/Volumes/Kindle/documents/My Clippings.txt"
 
 # === BOOK LIBRARY ===
 # Maps Kindle ASIN → epub for context extraction + title fragment for matching clippings.
