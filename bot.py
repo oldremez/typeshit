@@ -105,7 +105,17 @@ def card_keyboard(annotation_id: str) -> InlineKeyboardMarkup:
 
 
 async def process_next_highlight(update: Update, context: ContextTypes.DEFAULT_TYPE, silent=False):
-    """Process and send the next highlight to the user."""
+    """Show next pending card if any, otherwise fetch and process a new highlight."""
+    pending = state_manager.state.pending_cards
+    if pending:
+        card = pending[0]
+        await update.effective_message.reply_text(
+            format_card_message(card),
+            parse_mode="MarkdownV2",
+            reply_markup=card_keyboard(card.annotation_id),
+        )
+        return card
+
     new_highlights = get_new_highlights()
 
     if not new_highlights:
