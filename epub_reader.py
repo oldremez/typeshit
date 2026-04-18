@@ -70,3 +70,11 @@ def get_highlight_with_context(full_text: str, start: int, end: int, context_cha
         "context": context,
         "context_start": left + sentence_start,
     }
+
+
+def find_context(full_text: str, highlight_text: str, context_chars: int = 300) -> dict | None:
+    """Find highlight_text in full_text by search and return context around it."""
+    pos = full_text.find(highlight_text)
+    if pos == -1:
+        return None
+    return get_highlight_with_context(full_text, pos, pos + len(highlight_text), context_chars)

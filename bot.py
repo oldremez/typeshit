@@ -19,13 +19,13 @@ from telegram.ext import (
 )
 
 import config
-from kindle_db import read_highlights
-from epub_reader import load_epub_text, get_highlight_with_context
+from clippings_parser import parse_clippings
+from epub_reader import load_epub_text, find_context
 from card_generator import generate_card
 from state import StateManager, Card
 from exporter import export_to_csv
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 # Conversation states
@@ -50,12 +50,10 @@ def get_epub_text(asin: str) -> str | None:
 
 
 def get_new_highlights() -> list:
-    """Get all highlights not yet processed across all books, sorted by book then position."""
-    all_highlights = read_highlights(config.ANNOTATION_DB)
-    new = [
-        h for h in all_highlights
-        if h.start_position > state_manager.last_position_for(h.asin)
-    ]
+    """Get all highlights not yet processed across all books."""
+    all_highlights = parse_clippings(config.CLIPPINGS_PATH, config.CLIPPINGS_TITLE_TO_ASIN)
+    new = [h for h in all_highlights if not state_manager.is_processed(h.annotation_id)]
+    logger.debug(f"get_new_highlights: {len(all_highlights)} total, {len(new)} unprocessed, {len(state_manager.state.processed_ids)} in processed_ids")
     return new
 
 
@@ -98,19 +96,22 @@ async def process_next_highlight(update: Update, context: ContextTypes.DEFAULT_T
         return None
 
     highlight = new_highlights[0]
-    text = get_epub_text(highlight.asin)
-    if text is None:
-        book_id = highlight.asin
+    logger.debug(f"Processing highlight {highlight.annotation_id} from book {highlight.asin} loc {highlight.location_start}")
+    epub_text = get_epub_text(highlight.asin)
+    if epub_text is None:
         await update.effective_message.reply_text(
-            f"⚠️ No epub configured for book `{book_id}`.\n"
+            f"⚠️ No epub configured for book `{highlight.asin}`.\n"
             "Add it to `BOOKS` in config.py.",
             parse_mode="Markdown"
         )
         return None
 
-    data = get_highlight_with_context(text, highlight.start_position, highlight.end_position)
-    book_title = config.BOOKS.get(highlight.asin, {}).get("title", highlight.asin)
+    data = find_context(epub_text, highlight.text)
+    if data is None:
+        logger.warning(f"Could not find '{highlight.text}' in epub, using highlight text only")
+        data = {"highlight": highlight.text, "context": highlight.text}
 
+    book_title = config.BOOKS.get(highlight.asin, {}).get("title", highlight.asin)
     await update.effective_message.reply_text(f"⏳ Generating card with Claude... _{book_title}_", parse_mode="Markdown")
 
     try:
@@ -129,7 +130,7 @@ async def process_next_highlight(update: Update, context: ContextTypes.DEFAULT_T
         note=card_data.get("note", ""),
     )
     state_manager.add_pending(card)
-    state_manager.mark_processed(highlight.annotation_id, highlight.asin, highlight.start_position)
+    state_manager.mark_processed(highlight.annotation_id)
 
     # print(format_card_message(card))  # for debugging
 

@@ -23,8 +23,7 @@ class Card:
 
 @dataclass
 class BotState:
-    # Maps asin -> last processed position for that book
-    last_processed: dict = field(default_factory=dict)
+    processed_ids: list[str] = field(default_factory=list)
     pending_cards: list[Card] = field(default_factory=list)
     accepted_cards: list[Card] = field(default_factory=list)
 
@@ -40,7 +39,7 @@ class StateManager:
         with open(self.state_file, "r", encoding="utf-8") as f:
             data = json.load(f)
         state = BotState(
-            last_processed=data.get("last_processed", {}),
+            processed_ids=data.get("processed_ids", []),
             pending_cards=[Card(**c) for c in data.get("pending_cards", [])],
             accepted_cards=[Card(**c) for c in data.get("accepted_cards", [])],
         )
@@ -48,7 +47,7 @@ class StateManager:
 
     def save(self):
         data = {
-            "last_processed": self._state.last_processed,
+            "processed_ids": self._state.processed_ids,
             "pending_cards": [asdict(c) for c in self._state.pending_cards],
             "accepted_cards": [asdict(c) for c in self._state.accepted_cards],
         }
@@ -59,12 +58,13 @@ class StateManager:
     def state(self) -> BotState:
         return self._state
 
-    def mark_processed(self, annotation_id: str, asin: str, position: int):
-        self._state.last_processed[asin] = {"annotation_id": annotation_id, "position": position}
+    def mark_processed(self, annotation_id: str):
+        if annotation_id not in self._state.processed_ids:
+            self._state.processed_ids.append(annotation_id)
         self.save()
 
-    def last_position_for(self, asin: str) -> int:
-        return self._state.last_processed.get(asin, {}).get("position", 0)
+    def is_processed(self, annotation_id: str) -> bool:
+        return annotation_id in self._state.processed_ids
 
     def add_pending(self, card: Card):
         self._state.pending_cards.append(card)
