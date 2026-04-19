@@ -58,10 +58,19 @@ def get_epub_text(book_id: str) -> str | None:
 
 
 def get_new_highlights() -> list:
-    """Get all highlights not yet processed across all books."""
+    """Get unprocessed highlights for books that have an epub configured."""
+    books_with_epub = {
+        book_id for book_id, info in config.BOOKS.items() if info.get("epub")
+    }
     all_highlights = parse_clippings(config.CLIPPINGS_PATH)
-    new = [h for h in all_highlights if not state_manager.is_processed(h.annotation_id)]
-    logger.debug(f"get_new_highlights: {len(all_highlights)} total, {len(new)} unprocessed, {len(state_manager.state.processed_ids)} in processed_ids")
+    new = [
+        h for h in all_highlights
+        if not state_manager.is_processed(h.annotation_id) and h.book_id in books_with_epub
+    ]
+    logger.debug(
+        "get_new_highlights: %d total, %d with epub, %d unprocessed, %d processed_ids",
+        len(all_highlights), len(books_with_epub), len(new), len(state_manager.state.processed_ids),
+    )
     return new
 
 
