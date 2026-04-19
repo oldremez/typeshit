@@ -21,9 +21,15 @@ CLIPPINGS_PATH = os.path.join(DATA_DIR, "clippings.txt")
 # epub paths support ~ expansion.
 BOOKS_FILE = os.path.join(DATA_DIR, "books.json")
 EPUBS_DIR  = os.path.join(DATA_DIR, "epubs")
+STATE_FILE = os.path.join(DATA_DIR, "state.json")
 os.makedirs(EPUBS_DIR, exist_ok=True)
 
-if not os.path.exists(BOOKS_FILE):
+for _path in [CLIPPINGS_PATH, STATE_FILE]:
+    if not os.path.exists(_path):
+        open(_path, "w").close()
+
+# Ensure books.json contains valid JSON
+if not os.path.exists(BOOKS_FILE) or os.path.getsize(BOOKS_FILE) == 0:
     with open(BOOKS_FILE, "w", encoding="utf-8") as _f:
         json.dump({}, _f)
 with open(BOOKS_FILE, encoding="utf-8") as _f:
@@ -34,6 +40,4 @@ BOOKS = {book_id: {**book, "epub": os.path.expanduser(book["epub"]) if book.get(
 # === LOGGING ===
 LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO").upper()
 
-# === STATE ===
-STATE_FILE            = os.path.join(DATA_DIR, "state.json")
 AUTO_EXPORT_THRESHOLD = 30
