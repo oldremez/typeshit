@@ -331,16 +331,27 @@ async def handle_document_upload(update: Update, context: ContextTypes.DEFAULT_T
         await update.message.reply_text(f"✅ Epub saved for *{title}*.", parse_mode="Markdown")
 
 
+async def cmd_unknown(update: Update, _context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        "Unknown command. Available commands:\n"
+        "/next — review next card or generate from a new highlight\n"
+        "/stats — show progress per book\n"
+        "/pending — re-show last 5 unreviewed cards\n"
+        "/setepub — upload an epub for a book"
+    )
+
+
 def main():
     app = Application.builder().token(config.TELEGRAM_BOT_TOKEN).build()
 
     app.add_handler(CommandHandler("next", cmd_next))
     app.add_handler(CommandHandler("stats", cmd_stats))
     app.add_handler(CommandHandler("pending", cmd_pending))
-    app.add_handler(CallbackQueryHandler(button_callback))
     app.add_handler(CommandHandler("setepub", cmd_setepub))
+    app.add_handler(CallbackQueryHandler(button_callback))
     app.add_handler(MessageHandler(filters.Document.ALL, handle_document_upload))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_edit_message))
+    app.add_handler(MessageHandler(filters.COMMAND, cmd_unknown))
 
     logger.info("Bot started. Listening...")
     app.run_polling(allowed_updates=Update.ALL_TYPES)
