@@ -15,11 +15,13 @@ venv/bin/pip install -r requirements.txt
 ### 2. Create a `.env` file
 
 ```
-TELEGRAM_BOT_TOKEN=your_bot_token_here
-TELEGRAM_CHAT_ID=your_chat_id_here
+SERVER_USER=your_ssh_username
+SERVER_HOST=your.server.address
+SERVER_PATH=~/.typeshit/clippings.txt   # optional, this is the default
+SSH_KEY=~/.ssh/id_ed25519               # optional, omit to use SSH default
 ```
 
-These are the same credentials used by the main bot.
+Make sure your SSH key is added to `~/.ssh/authorized_keys` on the server so SCP runs without a password prompt.
 
 ### 3. Test it manually
 

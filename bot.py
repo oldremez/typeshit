@@ -307,16 +307,6 @@ async def handle_document_upload(update: Update, context: ContextTypes.DEFAULT_T
     if not doc:
         return
 
-    if doc.file_name == "My Clippings.txt":
-        file = await doc.get_file()
-        await file.download_to_drive(config.CLIPPINGS_PATH)
-        logger.info(f"Clippings synced ({doc.file_size} bytes)")
-        new_books = discover_books(config.CLIPPINGS_PATH, config.BOOKS_FILE)
-        _reload_books()
-        extra = f"\n📖 New books added: {len(new_books)}" if new_books else ""
-        await update.message.reply_text(f"📚 Clippings synced ({doc.file_size // 1024} KB).{extra} Use /stats to see highlights.")
-        return
-
     book_id = context.user_data.get("pending_epub_book_id")
     if doc.file_name and doc.file_name.endswith(".epub") and book_id:
         epub_path = os.path.join(config.EPUBS_DIR, f"{book_id}.epub")
@@ -342,6 +332,11 @@ async def cmd_unknown(update: Update, _context: ContextTypes.DEFAULT_TYPE):
 
 
 def main():
+    new_books = discover_books(config.CLIPPINGS_PATH, config.BOOKS_FILE)
+    if new_books:
+        logger.info("Discovered %d new book(s): %s", len(new_books), new_books)
+        _reload_books()
+
     app = Application.builder().token(config.TELEGRAM_BOT_TOKEN).build()
 
     app.add_handler(CommandHandler("next", cmd_next))

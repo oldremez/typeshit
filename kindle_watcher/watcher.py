@@ -1,18 +1,16 @@
 """
 watcher.py
-Monitors Kindle mount on macOS and syncs My Clippings.txt to the remote bot via Telegram.
+Monitors Kindle mount on macOS and syncs My Clippings.txt to a remote server via SCP.
 
 Run: python3 watcher.py
 """
 
-import asyncio
 import logging
 import os
+import subprocess
 import time
 
 from dotenv import load_dotenv
-from telegram import Bot
-from telegram.error import TelegramError
 
 load_dotenv()
 
@@ -20,21 +18,24 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(mess
 logger = logging.getLogger(__name__)
 
 KINDLE_CLIPPINGS = "/Volumes/Kindle/documents/My Clippings.txt"
-BOT_TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
-CHAT_ID    = os.environ["TELEGRAM_CHAT_ID"]
-POLL_INTERVAL = 10  # seconds between mount checks
+POLL_INTERVAL    = 10  # seconds between mount checks
+
+SERVER_USER      = os.environ["SERVER_USER"]
+SERVER_HOST      = os.environ["SERVER_HOST"]
+SERVER_PATH      = os.environ.get("SERVER_PATH", "~/.typeshit/clippings.txt")
+SSH_KEY          = os.environ.get("SSH_KEY", "")  # optional, e.g. ~/.ssh/id_ed25519
 
 
-async def send_clippings(path: str):
-    bot = Bot(token=BOT_TOKEN)
-    with open(path, "rb") as f:
-        await bot.send_document(
-            chat_id=CHAT_ID,
-            document=f,
-            filename="My Clippings.txt",
-            caption="kindle_sync",
-        )
-    logger.info("Clippings sent to bot.")
+def sync_clippings(path: str):
+    dest = f"{SERVER_USER}@{SERVER_HOST}:{SERVER_PATH}"
+    cmd = ["scp"]
+    if SSH_KEY:
+        cmd += ["-i", os.path.expanduser(SSH_KEY)]
+    cmd += [path, dest]
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode != 0:
+        raise RuntimeError(result.stderr.strip())
+    logger.info("Clippings synced to %s", dest)
 
 
 def main():
@@ -46,18 +47,16 @@ def main():
             if os.path.exists(KINDLE_CLIPPINGS):
                 mtime = os.path.getmtime(KINDLE_CLIPPINGS)
                 if mtime != last_mtime:
-                    logger.info("Kindle detected%s, sending clippings...",
+                    logger.info("Kindle detected%s, syncing clippings...",
                                 " (updated)" if last_mtime is not None else "")
-                    asyncio.run(send_clippings(KINDLE_CLIPPINGS))
+                    sync_clippings(KINDLE_CLIPPINGS)
                     last_mtime = mtime
             else:
                 if last_mtime is not None:
                     logger.info("Kindle disconnected.")
                     last_mtime = None
-        except TelegramError as e:
-            logger.error("Telegram error: %s", e)
         except Exception as e:
-            logger.exception("Unexpected error: %s", e)
+            logger.error("Sync failed: %s", e)
 
         time.sleep(POLL_INTERVAL)
 
