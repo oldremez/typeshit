@@ -13,15 +13,6 @@ venv/
 .env
 .env.*
 
-# Bot state
-*.json
-
-# Exports
-*.csv
-
-# epubs (large personal files)
-*.epub
-
 # IDE
 .idea/
 .vscode/
