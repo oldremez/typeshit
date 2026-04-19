@@ -28,6 +28,9 @@ os.makedirs(EPUBS_DIR, exist_ok=True)
 
 BOOKS = {book_id: {**book, "epub": os.path.expanduser(book["epub"]) if book.get("epub") else ""} for book_id, book in _raw.items()}
 
+# === LOGGING ===
+LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO").upper()
+
 # === STATE & EXPORT ===
 STATE_FILE            = os.path.expanduser("~/.kindle_greek_bot_state.json")
 AUTO_EXPORT_THRESHOLD = 30
