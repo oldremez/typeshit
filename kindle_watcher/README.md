@@ -19,6 +19,7 @@ SERVER_USER=your_ssh_username
 SERVER_HOST=your.server.address
 SERVER_PATH=~/.typeshit/clippings.txt   # optional, this is the default
 SSH_KEY=~/.ssh/id_ed25519               # optional, omit to use SSH default
+LOG_LEVEL=INFO                          # optional, default INFO (use DEBUG to trace skips)
 ```
 
 Make sure your SSH key is added to `~/.ssh/authorized_keys` on the server so SCP runs without a password prompt.
