@@ -1,6 +1,7 @@
 """
 watcher.py
-Monitors Kindle mount on macOS and syncs My Clippings.txt to a remote server via SCP.
+One-shot script: syncs My Clippings.txt to a remote server via SCP if the file
+is new or has changed since last run. Designed to be called from cron.
 
 Run: python3 watcher.py
 """
@@ -8,7 +9,7 @@ Run: python3 watcher.py
 import logging
 import os
 import subprocess
-import time
+import sys
 
 from dotenv import load_dotenv
 
@@ -18,12 +19,25 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(mess
 logger = logging.getLogger(__name__)
 
 KINDLE_CLIPPINGS = "/Volumes/Kindle/documents/My Clippings.txt"
-POLL_INTERVAL    = 10  # seconds between mount checks
+MTIME_FILE       = os.path.expanduser("~/.typeshit/kindle_last_mtime")
 
-SERVER_USER      = os.environ["SERVER_USER"]
-SERVER_HOST      = os.environ["SERVER_HOST"]
-SERVER_PATH      = os.environ.get("SERVER_PATH", "~/.typeshit/clippings.txt")
-SSH_KEY          = os.environ.get("SSH_KEY", "")  # optional, e.g. ~/.ssh/id_ed25519
+SERVER_USER = os.environ["SERVER_USER"]
+SERVER_HOST = os.environ["SERVER_HOST"]
+SERVER_PATH = os.environ.get("SERVER_PATH", "~/.typeshit/clippings.txt")
+SSH_KEY     = os.environ.get("SSH_KEY", "")
+
+
+def last_synced_mtime() -> float:
+    try:
+        return float(open(MTIME_FILE).read().strip())
+    except (FileNotFoundError, ValueError):
+        return 0.0
+
+
+def save_mtime(mtime: float):
+    os.makedirs(os.path.dirname(MTIME_FILE), exist_ok=True)
+    with open(MTIME_FILE, "w") as f:
+        f.write(str(mtime))
 
 
 def sync_clippings(path: str):
@@ -39,26 +53,22 @@ def sync_clippings(path: str):
 
 
 def main():
-    logger.info("Kindle watcher started. Polling every %ds for %s", POLL_INTERVAL, KINDLE_CLIPPINGS)
-    last_mtime = None
+    if not os.path.exists(KINDLE_CLIPPINGS):
+        logger.debug("Kindle not mounted, nothing to do.")
+        sys.exit(0)
 
-    while True:
-        try:
-            if os.path.exists(KINDLE_CLIPPINGS):
-                mtime = os.path.getmtime(KINDLE_CLIPPINGS)
-                if mtime != last_mtime:
-                    logger.info("Kindle detected%s, syncing clippings...",
-                                " (updated)" if last_mtime is not None else "")
-                    sync_clippings(KINDLE_CLIPPINGS)
-                    last_mtime = mtime
-            else:
-                if last_mtime is not None:
-                    logger.info("Kindle disconnected.")
-                    last_mtime = None
-        except Exception as e:
-            logger.error("Sync failed: %s", e)
+    mtime = os.path.getmtime(KINDLE_CLIPPINGS)
+    if mtime <= last_synced_mtime():
+        logger.debug("Clippings unchanged, skipping.")
+        sys.exit(0)
 
-        time.sleep(POLL_INTERVAL)
+    logger.info("Kindle detected, syncing clippings...")
+    try:
+        sync_clippings(KINDLE_CLIPPINGS)
+        save_mtime(mtime)
+    except Exception as e:
+        logger.error("Sync failed: %s", e)
+        sys.exit(1)
 
 
 if __name__ == "__main__":

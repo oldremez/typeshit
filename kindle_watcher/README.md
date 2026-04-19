@@ -1,6 +1,6 @@
 # Kindle Watcher
 
-Runs on your Mac in the background. When a Kindle is connected, it detects `My Clippings.txt` and sends it to the remote Telegram bot, which stores it and uses it for flashcard generation.
+Runs on your Mac. When a Kindle is connected, it detects `My Clippings.txt` and syncs it to the remote server via SCP. Designed to be called from cron — it exits immediately if the Kindle isn't mounted or if nothing has changed.
 
 ## Setup
 
@@ -31,34 +31,37 @@ Plug in your Kindle, then run:
 venv/bin/python3 watcher.py
 ```
 
-You should see a log line like `Kindle detected, sending clippings...` and the bot should reply with a sync confirmation. Logs are printed to stdout.
+You should see a log line like `Kindle detected, syncing clippings...`. Run it a second time — it should log nothing (clippings unchanged).
 
-### 4. Install as a background service
-
-The included `com.kindlewatcher.plist` registers the watcher as a launchd user agent — it starts on login and restarts automatically if it crashes.
+### 4. Install as a cron job
 
 ```bash
-sed "s|__DIR__|$(pwd)|g" com.kindlewatcher.plist > ~/Library/LaunchAgents/com.kindlewatcher.plist
-launchctl load ~/Library/LaunchAgents/com.kindlewatcher.plist
+crontab -e
 ```
 
-Run this from the `kindle_watcher` directory so that `$(pwd)` resolves to the correct path.
+Add a line to run every minute:
 
-Logs are written to `/tmp/kindlewatcher.log`:
+```
+* * * * * cd /path/to/typeshit/kindle_watcher && venv/bin/python3 watcher.py >> /tmp/kindlewatcher.log 2>&1
+```
+
+Replace `/path/to/typeshit` with the actual path. The script exits in milliseconds when the Kindle isn't connected, so running every minute is cheap.
+
+To check logs:
 
 ```bash
 tail -f /tmp/kindlewatcher.log
 ```
 
-### Stopping / uninstalling
+### Removing
 
 ```bash
-launchctl unload ~/Library/LaunchAgents/com.kindlewatcher.plist
-rm ~/Library/LaunchAgents/com.kindlewatcher.plist
+crontab -e  # delete the line
 ```
 
 ## How it works
 
-- Polls every 10 seconds for `/Volumes/Kindle/documents/My Clippings.txt`
-- Sends the file to the bot on first detection and again whenever the file changes (i.e. new highlights were added during the session)
-- The remote bot saves the file to `~/.kindle_clippings.txt` and uses it as the clippings source
+- On each run, checks for `/Volumes/Kindle/documents/My Clippings.txt`
+- If found, compares mtime against `~/.typeshit/kindle_last_mtime`
+- Syncs via SCP only if the file is new or has changed; updates the stored mtime on success
+- Exits with code 0 on success or no-op, code 1 on sync failure
