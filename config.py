@@ -24,9 +24,8 @@ EPUBS_DIR  = os.path.join(DATA_DIR, "epubs")
 STATE_FILE = os.path.join(DATA_DIR, "state.json")
 os.makedirs(EPUBS_DIR, exist_ok=True)
 
-for _path in [CLIPPINGS_PATH, STATE_FILE]:
-    if not os.path.exists(_path):
-        open(_path, "w").close()
+if not os.path.exists(CLIPPINGS_PATH):
+    open(CLIPPINGS_PATH, "w").close()
 
 # Ensure books.json contains valid JSON
 if not os.path.exists(BOOKS_FILE) or os.path.getsize(BOOKS_FILE) == 0:

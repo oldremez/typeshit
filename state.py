@@ -35,7 +35,11 @@ class StateManager:
 
     def _load(self) -> BotState:
         if not os.path.exists(self.state_file):
-            return BotState()
+            state = BotState()
+            empty = {"processed_ids": [], "pending_cards": [], "accepted_cards": []}
+            with open(self.state_file, "w", encoding="utf-8") as f:
+                json.dump(empty, f, indent=2)
+            return state
         with open(self.state_file, "r", encoding="utf-8") as f:
             data = json.load(f)
         state = BotState(
