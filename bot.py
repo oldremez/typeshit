@@ -286,6 +286,10 @@ async def handle_edit_message(update: Update, context: ContextTypes.DEFAULT_TYPE
 
 
 async def cmd_setepub(update: Update, _context: ContextTypes.DEFAULT_TYPE):
+    new_books = discover_books(config.CLIPPINGS_PATH, config.BOOKS_FILE)
+    if new_books:
+        logger.info("Discovered %d new book(s): %s", len(new_books), new_books)
+        _reload_books()
     books = config.BOOKS
     if not books:
         await update.message.reply_text("No books discovered yet. Sync your clippings first.")
