@@ -23,7 +23,11 @@ from epub_reader import load_epub_text, find_context
 from card_generator import generate_card
 from state import StateManager, Card
 
-logging.basicConfig(level=getattr(logging, config.LOG_LEVEL, logging.INFO))
+logging.basicConfig(
+    level=getattr(logging, config.LOG_LEVEL, logging.INFO),
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
 logger = logging.getLogger(__name__)
 
 # Conversation states
