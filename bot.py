@@ -1,17 +1,12 @@
 """
 bot.py
 Telegram bot for reviewing Greek flashcards from Kindle highlights.
-
-Commands:
-  /next    — process next unprocessed highlight
-  /stats   — show progress stats
-  /pending — show how many cards are waiting for review
 """
 
 import io
 import logging
 import os
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import BotCommand, Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     Application, CommandHandler, CallbackQueryHandler,
     MessageHandler, filters, ContextTypes, ConversationHandler
@@ -322,13 +317,23 @@ async def handle_document_upload(update: Update, context: ContextTypes.DEFAULT_T
 
 
 async def cmd_unknown(update: Update, _context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        "Unknown command. Available commands:\n"
-        "/next — review next card or generate from a new highlight\n"
-        "/stats — show progress per book\n"
-        "/pending — re-show last 5 unreviewed cards\n"
-        "/setepub — upload an epub for a book"
+    lines = "\n".join(f"/{name} — {desc}" for name, _, desc in COMMANDS)
+    await update.message.reply_text(f"Unknown command. Available:\n{lines}")
+
+
+COMMANDS = [
+    ("next",    cmd_next,    "Review next card or generate from a new highlight"),
+    ("stats",   cmd_stats,   "Show progress per book"),
+    ("pending", cmd_pending, "Re-show last 5 unreviewed cards"),
+    ("setepub", cmd_setepub, "Upload an epub for a book"),
+]
+
+
+async def post_init(app: Application):
+    await app.bot.set_my_commands(
+        [BotCommand(name, desc) for name, _, desc in COMMANDS]
     )
+    logger.info("Bot commands registered with Telegram.")
 
 
 def main():
@@ -337,12 +342,10 @@ def main():
         logger.info("Discovered %d new book(s): %s", len(new_books), new_books)
         _reload_books()
 
-    app = Application.builder().token(config.TELEGRAM_BOT_TOKEN).build()
+    app = Application.builder().token(config.TELEGRAM_BOT_TOKEN).post_init(post_init).build()
 
-    app.add_handler(CommandHandler("next", cmd_next))
-    app.add_handler(CommandHandler("stats", cmd_stats))
-    app.add_handler(CommandHandler("pending", cmd_pending))
-    app.add_handler(CommandHandler("setepub", cmd_setepub))
+    for name, handler, _ in COMMANDS:
+        app.add_handler(CommandHandler(name, handler))
     app.add_handler(CallbackQueryHandler(button_callback))
     app.add_handler(MessageHandler(filters.Document.ALL, handle_document_upload))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_edit_message))
