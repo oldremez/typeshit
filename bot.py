@@ -3,6 +3,7 @@ bot.py
 Telegram bot for reviewing Greek flashcards from Kindle highlights.
 """
 
+import asyncio
 import io
 import logging
 import os
@@ -32,6 +33,8 @@ state_manager = StateManager(config.STATE_FILE)
 
 # Per-book epub text cache: book_id -> full text string
 epub_cache: dict[str, str] = {}
+
+_prefetch_task: asyncio.Task | None = None
 
 
 def _reload_books():
@@ -110,6 +113,50 @@ def escape_md(text: str) -> str:
     return "".join(f"\\{c}" if c in special else c for c in str(text))
 
 
+async def _prefetch_next_card():
+    new_highlights = get_new_highlights()
+    if not new_highlights:
+        return
+    highlight = new_highlights[0]
+    if any(c.annotation_id == highlight.annotation_id for c in state_manager.state.pending_cards):
+        return  # already queued from a prior prefetch
+    epub_text = get_epub_text(highlight.book_id)
+    if epub_text is not None:
+        data = find_context(epub_text, highlight.text)
+        if data is None:
+            data = {"highlight": highlight.text, "context": highlight.text}
+    else:
+        data = {"highlight": highlight.text, "context": highlight.text}
+    book_title = config.BOOKS.get(highlight.book_id, {}).get("title", highlight.book_title)
+    logger.debug("Prefetching card for '%s' (%s)", highlight.text[:40], book_title)
+    try:
+        card_data = await asyncio.to_thread(
+            generate_card, data["highlight"], data["context"], config.ANTHROPIC_API_KEY
+        )
+    except Exception as e:
+        logger.warning("Prefetch failed: %s", e)
+        return
+    card = Card(
+        annotation_id=highlight.annotation_id,
+        asin=highlight.book_id,
+        highlight=data["highlight"],
+        context=data["context"],
+        front=card_data.get("front", data["highlight"]),
+        back=card_data.get("back", ""),
+        note=card_data.get("note", ""),
+    )
+    state_manager.add_pending(card)
+    state_manager.mark_processed(highlight.annotation_id)
+    logger.debug("Prefetch done: %s → %s", card.front, card.back)
+
+
+def _schedule_prefetch():
+    global _prefetch_task
+    if _prefetch_task and not _prefetch_task.done():
+        return
+    _prefetch_task = asyncio.create_task(_prefetch_next_card())
+
+
 def card_keyboard(annotation_id: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([
         [
@@ -130,6 +177,7 @@ async def process_next_highlight(update: Update, context: ContextTypes.DEFAULT_T
             parse_mode="MarkdownV2",
             reply_markup=card_keyboard(card.annotation_id),
         )
+        _schedule_prefetch()
         return card
 
     new_highlights = get_new_highlights()
@@ -171,13 +219,12 @@ async def process_next_highlight(update: Update, context: ContextTypes.DEFAULT_T
     state_manager.add_pending(card)
     state_manager.mark_processed(highlight.annotation_id)
 
-    # print(format_card_message(card))  # for debugging
-
     await update.effective_message.reply_text(
         format_card_message(card),
         parse_mode="MarkdownV2",
         reply_markup=card_keyboard(card.annotation_id),
     )
+    _schedule_prefetch()
     return card
 
 
