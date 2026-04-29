@@ -204,7 +204,12 @@ async def process_next_highlight(update: Update, context: ContextTypes.DEFAULT_T
     try:
         card_data = generate_card(data["highlight"], data["context"], config.ANTHROPIC_API_KEY)
     except Exception as e:
-        await update.effective_message.reply_text(f"❌ Claude error: {e}")
+        state_manager.mark_processed(highlight.annotation_id)
+        await update.effective_message.reply_text(
+            f"⚠️ Skipped *{escape_md(highlight.text)}* — Claude didn't return a valid card\\.\n"
+            f"_{escape_md(str(e))}_",
+            parse_mode="MarkdownV2",
+        )
         return None
 
     card = Card(
