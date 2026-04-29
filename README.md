@@ -9,100 +9,68 @@ flashcards — which you review and export to Quizlet.
 The project is split into two components:
 
 - **Bot** (runs on a remote server) — handles Telegram interactions, generates cards with Claude, tracks review state
-- **Kindle Watcher** (`kindle_watcher/`, runs on your Mac) — monitors for Kindle USB connection and syncs `My Clippings.txt` to the bot via Telegram
+- **Kindle Watcher** (`kindle_watcher/`, runs on your Mac) — monitors for Kindle USB connection and syncs `My Clippings.txt` to the server via SCP
 
-When you plug in your Kindle, the watcher automatically sends the clippings file to the bot. The bot saves it locally and uses it as the source for new highlights. No manual file handling needed.
+When you plug in your Kindle, the watcher automatically syncs the clippings file to the server. The bot reads it from there on every `/next`.
 
 ## Bot Setup
 
-### 1. Set up a virtual environment
-```bash
-python3 -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-```
-
-### 2. Create a Telegram bot
+### 1. Create a Telegram bot
 1. Open Telegram, search for **@BotFather**
 2. Send `/newbot` and follow instructions
 3. Copy the token you receive
 
-### 3. Get your Telegram Chat ID
+### 2. Get your Telegram Chat ID
 1. Start your bot (send it `/start`)
 2. Visit: `https://api.telegram.org/bot<YOUR_TOKEN>/getUpdates`
 3. Find `"chat": {"id": 123456789}` — that's your chat ID
 
-### 4. Create a `.env` file
+### 3. Create a `.env` file
 ```
 TELEGRAM_BOT_TOKEN=your_token_here
 TELEGRAM_CHAT_ID=your_chat_id_here
 ANTHROPIC_API_KEY=your_anthropic_key_here
+LOG_LEVEL=INFO
 ```
 
-### 5. Run the bot
+### 4. Run with Docker
 
-For a quick test:
 ```bash
-python3 bot.py
+docker compose up -d
 ```
 
-For persistent background execution on a Linux server, use systemd. Run this from the project directory — it uses `$PWD` and `$USER` so nothing needs to be edited manually:
+The data directory `~/.typeshit` is bind-mounted into the container so state, clippings, epubs, and books survive restarts and rebuilds.
 
+Follow logs:
 ```bash
-sudo tee /etc/systemd/system/kindlebot.service > /dev/null << EOF
-[Unit]
-Description=Kindle Greek Flashcard Bot
-After=network.target
-
-[Service]
-Type=simple
-User=$USER
-WorkingDirectory=$PWD
-ExecStart=$PWD/venv/bin/python3 bot.py
-Restart=on-failure
-RestartSec=10
-StandardOutput=append:$PWD/bot.log
-StandardError=append:$PWD/bot.log
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-sudo systemctl daemon-reload
-sudo systemctl enable kindlebot
-sudo systemctl start kindlebot
+docker compose logs -f
 ```
 
-Check status and follow logs:
+Restart / stop:
 ```bash
-sudo systemctl status kindlebot
-tail -f bot.log
+docker compose restart
+docker compose down
+```
+
+Rebuild after code changes:
+```bash
+docker compose up -d --build
 ```
 
 ## Kindle Watcher Setup
 
-See [`kindle_watcher/README.md`](kindle_watcher/README.md) for full instructions. Short version:
-
-```bash
-cd kindle_watcher
-python3 -m venv venv
-venv/bin/pip install -r requirements.txt
-# create .env with TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID
-sed "s|__DIR__|$(pwd)|g" com.kindlewatcher.plist > ~/Library/LaunchAgents/com.kindlewatcher.plist
-launchctl load ~/Library/LaunchAgents/com.kindlewatcher.plist
-```
+See [`kindle_watcher/README.md`](kindle_watcher/README.md) for full instructions. The watcher runs on your Mac as a cron job and syncs clippings to the server via SCP whenever the Kindle is connected.
 
 ## Usage
 
 | Command | Description |
 |---------|-------------|
 | `/next` | Review next pending card, or generate one from a new highlight |
-| `/batch 5` | Generate 5 new cards at once |
-| `/stats` | Show progress (accepted, pending, remaining) |
+| `/stats` | Show progress (accepted, pending, remaining per book) |
 | `/pending` | Re-show the last 5 unreviewed cards |
-| `/export` | Export accepted cards to CSV for Quizlet |
+| `/setepub` | Upload an epub file for a book |
 
-Cards are also exported automatically as a Telegram file every 30 accepted cards.
+Cards are exported automatically as a Telegram file every 30 accepted cards.
 
 ## Card Review Flow
 
@@ -126,16 +94,16 @@ In Quizlet:
 
 ```
 ├── bot.py               # Telegram bot (main entry point)
-├── config.py            # Paths, tokens, book mappings
+├── config.py            # Paths, tokens, thresholds
 ├── clippings_parser.py  # Parses My Clippings.txt from Kindle
 ├── epub_reader.py       # Extracts context from epub
 ├── card_generator.py    # Claude API call to generate cards
 ├── state.py             # Tracks progress (JSON file on disk)
-├── exporter.py          # Exports to Quizlet-compatible CSV
 ├── requirements.txt     # Python dependencies
+├── Dockerfile           # Bot container image
+├── docker-compose.yml   # Compose config (bind-mounts ~/.typeshit)
 └── kindle_watcher/      # Local Mac agent for Kindle sync
     ├── watcher.py
     ├── requirements.txt
-    ├── com.kindlewatcher.plist
     └── README.md
 ```
