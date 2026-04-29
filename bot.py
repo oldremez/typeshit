@@ -193,15 +193,19 @@ async def process_next_highlight(update: Update, context: ContextTypes.DEFAULT_T
     highlight = new_highlights[0]
     logger.debug(f"Processing highlight {highlight.annotation_id} from book {highlight.book_id} loc {highlight.location_start}")
     epub_text = get_epub_text(highlight.book_id)
+    no_context_reason = None
     if epub_text is not None:
         data = find_context(epub_text, highlight.text)
         if data is None:
-            logger.warning(f"Could not find '{highlight.text}' in epub, using highlight text only")
+            logger.warning("Could not find '%s' as a whole word in epub", highlight.text)
+            no_context_reason = f"_{escape_md(highlight.text)}_ не найдено в epub как отдельное слово\\."
             data = {"highlight": highlight.text, "context": highlight.text}
     else:
         data = {"highlight": highlight.text, "context": highlight.text}
 
     book_title = config.BOOKS.get(highlight.book_id, {}).get("title", highlight.book_title)
+    if no_context_reason:
+        await update.effective_message.reply_text(f"⚠️ {no_context_reason}", parse_mode="MarkdownV2")
     await update.effective_message.reply_text(f"⏳ Generating card with Claude... _{book_title}_", parse_mode="Markdown")
 
     try:

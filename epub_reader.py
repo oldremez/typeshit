@@ -73,8 +73,9 @@ def get_highlight_with_context(full_text: str, start: int, end: int, context_cha
 
 
 def find_context(full_text: str, highlight_text: str, context_chars: int = 300) -> dict | None:
-    """Find highlight_text in full_text by search and return context around it."""
-    pos = full_text.find(highlight_text)
-    if pos == -1:
+    """Find highlight_text as a whole word in full_text and return context around it."""
+    pattern = r'\b' + re.escape(highlight_text) + r'\b'
+    match = re.search(pattern, full_text)
+    if match is None:
         return None
-    return get_highlight_with_context(full_text, pos, pos + len(highlight_text), context_chars)
+    return get_highlight_with_context(full_text, match.start(), match.end(), context_chars)
