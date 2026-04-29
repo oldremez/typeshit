@@ -5,7 +5,9 @@ Uses Claude API to prepare a Greek→Russian flashcard from a highlight + contex
 
 import anthropic
 import json
+import logging
 
+logger = logging.getLogger(__name__)
 
 SYSTEM_PROMPT = """You are a Greek language expert helping a learner create Anki/Quizlet flashcards.
 
@@ -50,12 +52,17 @@ Generate a flashcard for this Greek word/phrase."""
     )
 
     text = response.content[0].text.strip()
-    
+    logger.debug("Raw Claude response: %r", text)
+
     # Strip markdown fences if present
     if text.startswith("```"):
         text = text.split("```")[1]
         if text.startswith("json"):
             text = text[4:]
-    
-    card_data = json.loads(text)
-    return card_data
+        text = text.strip()
+
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError as e:
+        logger.error("Failed to parse Claude response as JSON: %s | raw: %r", e, text)
+        raise
