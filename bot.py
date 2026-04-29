@@ -169,6 +169,9 @@ def card_keyboard(annotation_id: str) -> InlineKeyboardMarkup:
 
 async def process_next_highlight(update: Update, context: ContextTypes.DEFAULT_TYPE, silent=False):
     """Show next pending card if any, otherwise fetch and process a new highlight."""
+    if _prefetch_task and not _prefetch_task.done():
+        await _prefetch_task
+
     pending = state_manager.state.pending_cards
     if pending:
         card = pending[0]
