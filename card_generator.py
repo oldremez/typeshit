@@ -19,14 +19,15 @@ Given a highlighted Greek word or phrase and its sentence context, produce a fla
 
 Rules:
 - If a verb is highlighted in a conjugated form, front should be the infinitive/1st person present
-- If a noun is in an oblique case, front should be the nominative
+- If a noun is in an oblique case, front should be the nominative with its definite article (e.g. "η τσέπη", "ο δρόμος", "το βιβλίο")
 - If it's a phrase or idiom, keep the phrase as-is but normalized
 - Keep back to 1-5 words when possible
 - Keep note under 15 words
 - Respond ONLY with valid JSON, no markdown, no extra text
 
-Example response:
+Example responses:
 {"front": "αγαπώ", "back": "я люблю / любить", "note": "Глагол; неправильный в некоторых временах"}
+{"front": "η τσέπη", "back": "карман", "note": "Существительное ж.р.; τσέπες — форма мн. числа"}
 """
 
 
